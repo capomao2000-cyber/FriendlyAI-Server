@@ -18,25 +18,25 @@ app.post('/chat', async (req, res) => {
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
   const history = Array.isArray(req.body?.history) ? req.body.history.slice(-12) : [];
   if (!message || message.length > 4000) return res.status(400).json({ error: 'Messaggio non valido.' });
-  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'Il servizio IA non è ancora configurato.' });
+  if (!process.env.GROQ_API_KEY) return res.status(503).json({ error: 'Il servizio IA non è ancora configurato.' });
   const safeHistory = history.filter(m => ['user', 'assistant'].includes(m?.role) && typeof m?.content === 'string')
     .map(m => ({ role: m.role, content: m.content.slice(0, 4000) }));
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-6.2-sol', instructions, input: [...safeHistory, { role: 'user', content: message }], max_output_tokens: 500 })
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b', messages: [{ role: 'system', content: instructions }, ...safeHistory, { role: 'user', content: message }], max_tokens: 500, temperature: 0.7 })
     });
     const data = await response.json();
     if (!response.ok) {
-      console.error('OpenAI API error:', response.status, data?.error?.code || 'unknown', data?.error?.message || 'Nessun dettaglio');
+      console.error('Groq API error:', response.status, data?.error?.code || 'unknown', data?.error?.message || 'Nessun dettaglio');
       return res.status(502).json({ error: 'Il servizio IA non è disponibile al momento.' });
     }
-    const text = (data.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('\n').trim();
+    const text = data.choices?.[0]?.message?.content?.trim() || '';
     if (!text) return res.status(502).json({ error: 'Non ho ricevuto una risposta. Riprova tra poco.' });
     return res.json({ reply: text });
   } catch (err) {
-    console.error('OpenAI request failed:', err?.message || 'errore di rete');
+    console.error('Groq request failed:', err?.message || 'errore di rete');
     return res.status(502).json({ error: 'Impossibile contattare il servizio IA.' });
   }
 });
