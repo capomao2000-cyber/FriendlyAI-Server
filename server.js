@@ -25,17 +25,22 @@ app.post('/chat', async (req, res) => {
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-6-sol', instructions, input: [...safeHistory, { role: 'user', content: message }], max_output_tokens: 500 })
+      body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-6.2-sol', instructions, input: [...safeHistory, { role: 'user', content: message }], max_output_tokens: 500 })
     });
     const data = await response.json();
-    if (!response.ok) return res.status(502).json({ error: 'Il servizio IA non è disponibile al momento.' });
+    if (!response.ok) {
+      console.error('OpenAI API error:', response.status, data?.error?.code || 'unknown', data?.error?.message || 'Nessun dettaglio');
+      return res.status(502).json({ error: 'Il servizio IA non è disponibile al momento.' });
+    }
     const text = (data.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('\n').trim();
     if (!text) return res.status(502).json({ error: 'Non ho ricevuto una risposta. Riprova tra poco.' });
     return res.json({ reply: text });
-  } catch {
+  } catch (err) {
+    console.error('OpenAI request failed:', err?.message || 'errore di rete');
     return res.status(502).json({ error: 'Impossibile contattare il servizio IA.' });
   }
 });
 
 const port = Number(process.env.PORT) || 8787;
 app.listen(port, '0.0.0.0', () => console.log(`Server Conforto attivo sulla porta ${port}`));
+
